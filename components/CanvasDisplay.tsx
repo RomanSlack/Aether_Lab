@@ -1,10 +1,12 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { GenParams } from '../types';
 import { seedNoise, pattern } from '../utils/noise';
+import { AspectRatio } from '../App';
 
 interface CanvasDisplayProps {
   params: GenParams;
   resolution: 'preview' | 'hd';
+  aspectRatio: AspectRatio;
 }
 
 // Helper to convert hex to rgb
@@ -26,13 +28,34 @@ const lerpColor = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, 
   };
 };
 
-const CanvasDisplay: React.FC<CanvasDisplayProps> = ({ params, resolution }) => {
+const CanvasDisplay: React.FC<CanvasDisplayProps> = ({ params, resolution, aspectRatio }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isRendering, setIsRendering] = useState(false);
   
-  // Dimensions based on resolution
-  const width = resolution === 'hd' ? 1920 : 600;
-  const height = resolution === 'hd' ? 1920 : 600; // Square for art
+  // Calculate dimensions based on resolution and aspect ratio
+  const getDimensions = () => {
+    // Base max dimension: 2048 for HD (2K), 600 for preview
+    const maxDim = resolution === 'hd' ? 2048 : 600;
+    
+    const [w, h] = aspectRatio.split(':').map(Number);
+    const ratio = w / h;
+
+    let width, height;
+
+    if (ratio >= 1) {
+        // Landscape or Square
+        width = maxDim;
+        height = Math.round(maxDim / ratio);
+    } else {
+        // Portrait
+        height = maxDim;
+        width = Math.round(maxDim * ratio);
+    }
+
+    return { width, height };
+  };
+
+  const { width, height } = getDimensions();
 
   useEffect(() => {
     const render = async () => {
@@ -65,20 +88,19 @@ const CanvasDisplay: React.FC<CanvasDisplayProps> = ({ params, resolution }) => 
             for (let row = y; row < endY; row++) {
                 for (let x = 0; x < width; x++) {
                     // Normalized coordinates
-                    // Use params.scale effectively
-                    // 0.005 is a good baseline.
-                    const nx = x * params.scale;
-                    const ny = row * params.scale;
+                    // We scale differently based on aspect ratio to ensure the noise "zoom" feels consistent
+                    // Taking the smaller dimension as the normalizer helps consistency
+                    const minDim = Math.min(width, height);
+                    
+                    // Offset coordinates slightly so we aren't always in top-left corner of noise space
+                    // The * 1000 is a convenience multiplier so the slider values are readable (0.001 vs 0.000001)
+                    const nx = (x / minDim) * params.scale * 1000; 
+                    const ny = (row / minDim) * params.scale * 1000;
 
-                    // Get noise value (0 to 1 approx, pattern returns -1 to 1? check utils)
-                    // The pattern function in utils uses fbm which is roughly -1 to 1 depending on settings, 
-                    // but our recursive pattern might drift. We normalize manually.
-                    
-                    // To vary the pattern significantly, we offset by seed
-                    // But seed is used in `seedNoise`.
-                    
                     // Calculate warping value
-                    const v = pattern(nx, ny, 1.0, params.distortion, 0.0, 0.0);
+                    // pattern(x, y, scale, distortion, detail, phase, qx, qy)
+                    // We pass 1.0 for scale here because we already applied scale to nx/ny
+                    const v = pattern(nx, ny, 1.0, params.distortion, params.detail, params.phase, 0.0, 0.0);
                     
                     // Normalize v roughly from [-1, 1] to [0, 1]
                     let val = (v + 1.0) * 0.5;
@@ -108,6 +130,8 @@ const CanvasDisplay: React.FC<CanvasDisplayProps> = ({ params, resolution }) => 
             y = endY;
 
             if (y < height) {
+                // If unmounted/re-triggered, we should probably stop, but 
+                // useRef check handles basic safety.
                 requestAnimationFrame(processChunk);
             } else {
                 setIsRendering(false);
@@ -117,7 +141,12 @@ const CanvasDisplay: React.FC<CanvasDisplayProps> = ({ params, resolution }) => 
         requestAnimationFrame(processChunk);
     };
 
-    render();
+    // Debounce slightly to prevent rapid firing if props change fast
+    const timer = setTimeout(() => {
+        render();
+    }, 50);
+
+    return () => clearTimeout(timer);
 
   }, [params, width, height]);
 
@@ -125,37 +154,44 @@ const CanvasDisplay: React.FC<CanvasDisplayProps> = ({ params, resolution }) => 
     const canvas = canvasRef.current;
     if (canvas) {
       const link = document.createElement('a');
-      link.download = `aether-lab-${Date.now()}.png`;
+      link.download = `aether-lab-${params.seed.toFixed(0)}-${aspectRatio.replace(':','x')}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
     }
   };
 
   return (
-    <div className="relative group w-full h-full flex items-center justify-center bg-slate-950 rounded-lg overflow-hidden shadow-2xl border border-slate-800">
+    <div className="relative group flex items-center justify-center bg-slate-950 rounded-lg overflow-hidden shadow-2xl border border-slate-800 max-w-full max-h-full p-2">
       <canvas 
         ref={canvasRef} 
         width={width} 
         height={height} 
-        className="w-full h-full object-contain max-h-[70vh]"
+        style={{
+            maxWidth: '100%',
+            maxHeight: '75vh',
+            aspectRatio: aspectRatio.replace(':', '/')
+        }}
+        className="object-contain shadow-lg"
       />
       
       {isRendering && (
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3">
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm z-10">
+          <div className="flex flex-col items-center gap-3 bg-slate-900 p-4 rounded-xl border border-slate-700 shadow-2xl">
              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-400"></div>
              <span className="text-cyan-400 font-mono text-sm">Rendering {resolution.toUpperCase()}...</span>
+             <span className="text-slate-500 text-[10px] font-mono">{width}x{height}px</span>
           </div>
         </div>
       )}
 
-      <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-20">
         <button 
             onClick={downloadImage}
-            className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-md shadow-lg font-mono text-xs flex items-center gap-2 border border-slate-600"
+            disabled={isRendering}
+            className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white px-4 py-2 rounded-md shadow-lg font-mono text-xs flex items-center gap-2 border border-slate-600"
         >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Download PNG
+            Download {resolution === 'hd' ? 'HD' : 'Preview'}
         </button>
       </div>
     </div>

@@ -120,8 +120,30 @@ export const fbm = (x: number, y: number, octaves: number, persistence: number, 
  * Pattern generation using domain warping
  * f(p) = fbm( p + fbm( p + fbm(p) ) )
  */
-export const pattern = (x: number, y: number, scale: number, distortion: number, qX: number, qY: number): number => {
-    const q = fbm(x * scale + qX, y * scale + qY, 4, 0.5, 2.0);
-    const r = fbm(x * scale + 4.0 * q + 20, y * scale + 4.0 * q + 20, 4, 0.5, 2.0);
-    return fbm(x * scale + distortion * r, y * scale + distortion * r, 4, 0.5, 2.0);
+export const pattern = (
+    x: number, 
+    y: number, 
+    scale: number, 
+    distortion: number, 
+    detail: number, 
+    phase: number, 
+    qX: number, 
+    qY: number
+): number => {
+    // Note: We allow 'detail' to control the octaves in the FBM calls.
+    const q = fbm(x * scale + qX, y * scale + qY, detail, 0.5, 2.0);
+    const r = fbm(x * scale + 4.0 * q + 20, y * scale + 4.0 * q + 20, detail, 0.5, 2.0);
+    
+    let val = fbm(x * scale + distortion * r, y * scale + distortion * r, detail, 0.5, 2.0);
+    
+    // Phase Mapping:
+    // If phase > 0, we wrap the noise value in a sine wave.
+    // This creates the "Agate" or "Wood Grain" banding effect.
+    if (phase > 0) {
+        // 'val' is roughly -1 to 1.
+        // We multiply by phase to increase frequency of bands.
+        val = Math.sin(val * phase * Math.PI);
+    }
+
+    return val;
 }

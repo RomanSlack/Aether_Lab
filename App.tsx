@@ -10,14 +10,19 @@ const initialParams: GenParams = {
   accentColor: '#bfdbfe', // Very light blue/white
   scale: 0.003,
   distortion: 4.5,
+  detail: 4,
+  phase: 5.0, // Start with some banding to show the effect
   contrast: 1.2,
   brightness: 0.0,
   seed: 12345
 };
 
+export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:5' | '3:4';
+
 function App() {
   const [params, setParams] = useState<GenParams>(initialParams);
   const [resolution, setResolution] = useState<'preview' | 'hd'>('preview');
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
 
   return (
     <div className="flex flex-col lg:flex-row h-screen w-full bg-slate-950 overflow-hidden">
@@ -36,7 +41,11 @@ function App() {
         </header>
         
         <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-            <CanvasDisplay params={params} resolution={resolution} />
+            <CanvasDisplay 
+              params={params} 
+              resolution={resolution} 
+              aspectRatio={aspectRatio}
+            />
         </div>
       </main>
 
@@ -46,6 +55,8 @@ function App() {
         setParams={setParams} 
         resolution={resolution}
         setResolution={setResolution}
+        aspectRatio={aspectRatio}
+        setAspectRatio={setAspectRatio}
       />
       
     </div>
