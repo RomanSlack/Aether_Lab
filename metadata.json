@@ -1,0 +1,5 @@
+{
+  "name": "Aether Lab - Generative Fluids",
+  "description": "An experimental laboratory for programmatically generating HD abstract fluid art using domain warping algorithms, powered by Gemini AI for parameter tuning.",
+  "requestFramePermissions": []
+}
